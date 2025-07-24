@@ -1,21 +1,18 @@
 import os
 import json
 import streamlit as st
-from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-# 🔹 환경 변수 로드
-load_dotenv()
-
-# 🔹 API 키 확인
-def get_api_key():
-    if not os.getenv("OPENAI_API_KEY") or not os.getenv("AZURE_OPENAI_ENDPOINT"):
-        st.error(".env 파일에 OPENAI_API_KEY 또는 AZURE_OPENAI_ENDPOINT가 누락되었습니다.")
-        st.stop()
+# 🔹 API 하드코딩 설정
+OPENAI_API_KEY = "2xh2HY0eQncdOTUf4KFjRIloG1uABNKdUx1clmB0XQVMbEPQQbN4JQQJ99BGACfhMk5XJ3w3AAAAACOGhWTl"
+AZURE_ENDPOINT = "https://big-data-capm-test.cognitiveservices.azure.com"
+EMBEDDING_DEPLOYMENT = "embedding-deployment"
+CHAT_DEPLOYMENT = "gpt-4"
+API_VERSION = "2025-01-01-preview"
 
 # 🔹 벡터스토어 로드
 @st.cache_resource
@@ -38,10 +35,10 @@ def load_json_file():
         documents.append(doc)
 
     embeddings = AzureOpenAIEmbeddings(
-        deployment=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
-        api_key=os.getenv("OPENAI_API_KEY"),
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        api_version=os.getenv("AZURE_OPENAI_API_VERSION")
+        deployment=EMBEDDING_DEPLOYMENT,
+        api_key=OPENAI_API_KEY,
+        azure_endpoint=AZURE_ENDPOINT,
+        api_version=API_VERSION,
     )
 
     vectorstore = FAISS.from_documents(documents, embeddings)
@@ -52,9 +49,10 @@ def get_selected_docs(user_query):
     search_result = retriever.invoke(user_query)
     return "\n\n".join([doc.page_content for doc in search_result])
 
-# 🔸 페이지 설정 및 스타일
+# 🔸 Streamlit UI 설정
 st.set_page_config(page_title="차분해(車分解) - 교통사고 과실비율 챗봇", layout="centered")
 
+# 🔹 스타일 및 레이아웃
 st.markdown("""
 <style>
 html, body, .main {
@@ -112,20 +110,18 @@ st.markdown("#### 사고 원인과 과실 비율을 **차분히 해석**해드�
 # 🔹 사용자 입력
 user_input = st.text_area("사고 상황을 입력해주세요 (예: 신호 위반으로 교차로에서 충돌한 상황 등)", "", label_visibility="collapsed", height=150)
 
-
-# 🔹 시스템 준비
-get_api_key()
+# 🔹 벡터 검색 및 LLM 체인 준비
 vectorstore = load_json_file()
 retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 4})
 
-# 🔹 프롬프트
 prompt = PromptTemplate.from_template("""
 당신은 사고 상황을 설명하면 과실비율을 알려주는 챗봇입니다.
-질문을 보고 참고 문서의 사고 설명과 가장 유사한 사고유형을 찾고, 먼저 사고 설명을 말해줍니다.
+질문을 보고 참고 문서의 사고 설명과 가장 유사한 사고유형을 찾고, 
+먼저 사고 유형을 알려주고 사고 설명을 말해줍니다.
 그다음 과실비율을 알려줍니다.
 또한 마지막에 관례 판결을 보고 싶으면 사고 링크를 제공해줍니다.
 사고 링크는 반드시 포함되어야 합니다.
-사고 링크는 "사고 링크: [링크]" 형식으로 작성해주세요.
+사고 링크는 "참고 링크: [링크]" 형식으로 작성해주세요.
 유사한 사례가 없다면 "유사한 사례가 없습니다. 좀 더 구체적인 상황 설명이 필요합니다." 라고 말하세요.
 대답은 한국어로 해주세요.
 
@@ -134,17 +130,17 @@ prompt = PromptTemplate.from_template("""
 # 질문: {question}
 """)
 
-# 🔹 LLM 체인 구성
 llm = AzureChatOpenAI(
-    deployment_name=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT"),
-    api_key=os.getenv("OPENAI_API_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    deployment_name=CHAT_DEPLOYMENT,
+    api_key=OPENAI_API_KEY,
+    azure_endpoint=AZURE_ENDPOINT,
+    api_version=API_VERSION,
     temperature=0.3
 )
+
 chain = prompt | llm | StrOutputParser()
 
-# 🔹 분석 버튼 (스피너 포함)
+# 🔹 버튼 동작
 if st.button("🚀 과실비율 분석하기", use_container_width=True):
     if not user_input.strip():
         st.warning("사고 상황을 입력해주세요.")
